@@ -8,3 +8,7 @@ pydantic>=2.8.0
 email-validator>=2.0.0
 python-dotenv>=1.0.0
 pytest>=8.0.0
+Set-Location "D:\AI Project\ADK\ADK"
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --env-file .env --host 127.0.0.1 --port 8000
+Set-Location "D:\AI Project\ADK\ADK"
+.\.venv\Scripts\adk.exe web --port 8001 adk_app
