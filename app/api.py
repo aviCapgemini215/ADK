@@ -117,7 +117,9 @@ async def list_refunds_for_email(
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, object]:
     try:
-        results = await check_refunds_for_email(session, str(email))
+        results = await check_refunds_for_email(
+            session, str(email), active_only=False
+        )
         return {"email": str(email), "results": results}
     except RefundError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
@@ -141,7 +143,9 @@ async def refund_eligibility(
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, object]:
     try:
-        results = await check_refunds_for_email(session, str(email))
+        results = await check_refunds_for_email(
+            session, str(email), active_only=True
+        )
         return {"email": str(email), "results": results}
     except RefundError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc

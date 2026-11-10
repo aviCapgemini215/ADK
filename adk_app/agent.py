@@ -188,7 +188,7 @@ class EmailRefundSpecialist(BaseAgent):
                             raise RefundError(404, "User not found")
                         try:
                             results = await check_refunds_for_email(
-                                session, email
+                                session, email, active_only=False
                             )
                         except RefundError as exc:
                             if exc.detail != (

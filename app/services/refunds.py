@@ -120,7 +120,7 @@ async def check_refunds_for_email(
     session: AsyncSession,
     email: str,
     *,
-    active_only: bool = False,
+    active_only: bool,
 ) -> list[dict[str, object]]:
     user_result = await session.execute(
         select(User).where(func.lower(User.email) == email.strip().lower())
