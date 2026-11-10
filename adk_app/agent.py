@@ -1,3 +1,4 @@
+import logging
 import re
 from collections.abc import AsyncGenerator
 
@@ -5,9 +6,12 @@ from google.adk.agents import BaseAgent
 from google.adk.agents.invocation_context import InvocationContext
 from google.adk.events import Event
 from google.genai import types
+from litellm import acompletion
+from litellm.exceptions import APIError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import config
 from app.database import SessionLocal
 from app.models import User
 from app.services.email import send_refund_email
@@ -18,6 +22,7 @@ from app.services.refunds import (
 )
 
 EMAIL_PATTERN = re.compile(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}")
+logger = logging.getLogger(__name__)
 
 
 def _request_text(ctx: InvocationContext) -> str:
@@ -350,11 +355,52 @@ def _select_refund_agent(request: str) -> EmailRefundSpecialist | None:
     return None
 
 
-def _fallback_response(request: str) -> str:
-    return (
-        "Please enter your registered email address so I can check whether "
-        "your account exists and list your courses."
-    )
+async def _answer_general_question(request: str) -> str:
+    if not config.GROQ_API_KEY:
+        return (
+            "General questions need Groq to be configured. Set GROQ_API_KEY "
+            "in your .env file. For account or refund help, provide your "
+            "registered email address."
+        )
+
+    question = EMAIL_PATTERN.sub("[email redacted]", request)
+    try:
+        response = await acompletion(
+            model=config.GROQ_MODEL,
+            api_key=config.GROQ_API_KEY,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a clear, friendly assistant for a course "
+                        "purchase and refund service. Answer general questions "
+                        "in plain language. Never claim to have checked an "
+                        "account, changed a registration, or processed a "
+                        "refund. For account-specific information, direct "
+                        "the user to the registered-email workflow."
+                    ),
+                },
+                {"role": "user", "content": question},
+            ],
+            temperature=0.3,
+            max_tokens=1024,
+            timeout=30,
+        )
+    except APIError:
+        logger.exception("Groq request failed")
+        return (
+            "I couldn't reach the Groq model just now. Please try again. "
+            "For account or refund help, provide your registered email address."
+        )
+
+    answer = response.choices[0].message.content
+    if not isinstance(answer, str) or not answer.strip():
+        logger.error("Groq returned an empty or non-text response")
+        return (
+            "The Groq model did not return a text response. Please try again. "
+            "For account or refund help, provide your registered email address."
+        )
+    return answer.strip()
 
 
 def _follow_up_prompt() -> str:
@@ -390,12 +436,10 @@ class EmailRefundCoordinator(BaseAgent):
         current_request = _current_request_text(ctx)
         target, email = _route_agent(ctx)
         if target is None:
-            response_text = (
-                _follow_up_prompt()
-                if email is not None
-                and _has_registration_for_email(ctx, email)
-                else _fallback_response(current_request)
-            )
+            if email is not None and _has_registration_for_email(ctx, email):
+                response_text = _follow_up_prompt()
+            else:
+                response_text = await _answer_general_question(current_request)
             yield Event(
                 invocation_id=ctx.invocation_id,
                 author=self.name,
@@ -413,7 +457,8 @@ root_agent = EmailRefundCoordinator(
     name="course_refund_workflow",
     description=(
         "Route email-based registration validation, refund eligibility, "
-        "cancellation, and status requests to deterministic database specialists."
+        "cancellation, and status requests to deterministic database specialists; "
+        "answer general questions with Groq."
     ),
     sub_agents=[
         user_validation_agent,

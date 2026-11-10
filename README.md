@@ -28,8 +28,9 @@ ADK, database, and refund flows, see [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 - Python 3.10+
 - Docker Desktop (or another PostgreSQL 16 instance)
-- No LLM key is required for refund processing. The ADK specialists run
-  deterministic PostgreSQL-backed checks and return stored refund IDs/statuses.
+- No LLM key is required for account validation or refund processing. The ADK
+  specialists run deterministic PostgreSQL-backed checks and return stored
+  refund IDs/statuses. General questions in the ADK chat use Groq.
 
 ## Setup on Windows (PowerShell)
 
@@ -45,9 +46,11 @@ docker compose up -d db
 ```
 
 Edit `.env` if needed. Keep `PAYMENT_GATEWAY_MODE=demo` only for local testing.
-The refund workflow uses deterministic backend logic and does not require
-`GROQ_API_KEY`. The optional Groq settings are retained in `.env` for future
-LLM-powered features. Set `POSTGRES_USER`, `POSTGRES_PASSWORD`, and
+Account validation and refund decisions use deterministic backend logic and do
+not require `GROQ_API_KEY`. General questions in the ADK chat are answered by
+the configured Groq model; these answers do not perform account or refund
+actions. Set `GROQ_API_KEY` and `GROQ_MODEL` in `.env` to enable that feature.
+Set `POSTGRES_USER`, `POSTGRES_PASSWORD`, and
 `POSTGRES_DB`; make the same credentials and database name match the
 `DATABASE_URL` line. For example, if you change the database password to
 `my_password`, also change `course_app:change_this_local_password` in

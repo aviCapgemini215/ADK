@@ -3,10 +3,11 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from google.genai import types
+from adk_app import agent as adk_agent
 from adk_app.agent import root_agent
 from adk_app.agent import (
+    _answer_general_question,
     _current_request_text,
-    _fallback_response,
     _process_selected_course_refund,
     _route_agent,
     _select_refund_agent,
@@ -142,25 +143,29 @@ def test_adk_router_only_processes_explicit_cancellation_requests() -> None:
     assert _select_refund_agent("check my registrations") is user_validation_agent
 
 
-def test_adk_fallback_does_not_repeat_registration_validation() -> None:
-    greeting = _fallback_response("hi")
-    unknown_request = _fallback_response("next")
-
-    assert "registered email address" in greeting
-    assert "registered email address" in unknown_request
-    assert "Registration validation" not in greeting
-    assert "Registration validation" not in unknown_request
-
-
-def test_adk_coordinator_returns_fallback_without_running_a_specialist() -> None:
+def test_adk_coordinator_answers_general_questions_with_groq(monkeypatch) -> None:
     ctx = SimpleNamespace(
         invocation_id="test-invocation",
         user_content=types.Content(
             role="user",
-            parts=[types.Part(text="hi")],
+            parts=[types.Part(text="What can you help me with?")],
         ),
         session=SimpleNamespace(events=[]),
     )
+
+    async def fake_acompletion(**_kwargs):
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="I can answer general questions and help with course refunds."
+                    )
+                )
+            ]
+        )
+
+    monkeypatch.setattr(adk_agent.config, "GROQ_API_KEY", "test-key")
+    monkeypatch.setattr(adk_agent, "acompletion", fake_acompletion)
 
     async def get_response_text() -> str:
         event = await anext(root_agent._run_async_impl(ctx))
@@ -168,9 +173,37 @@ def test_adk_coordinator_returns_fallback_without_running_a_specialist() -> None
 
     response = asyncio.run(get_response_text())
 
-    assert response.startswith("Please enter your registered email")
-    assert "list your courses" in response
+    assert response == "I can answer general questions and help with course refunds."
     assert "Registration validation" not in response
+
+
+def test_general_question_explains_missing_groq_configuration(monkeypatch) -> None:
+    monkeypatch.setattr(adk_agent.config, "GROQ_API_KEY", None)
+
+    response = asyncio.run(_answer_general_question("What can you help with?"))
+
+    assert "Set GROQ_API_KEY in your .env file" in response
+
+
+def test_general_question_redacts_email_before_sending_to_groq(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(adk_agent.config, "GROQ_API_KEY", "test-key")
+
+    async def fake_acompletion(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="Here's help."))]
+        )
+
+    monkeypatch.setattr(adk_agent, "acompletion", fake_acompletion)
+
+    response = asyncio.run(
+        _answer_general_question("How can I help student@example.com?")
+    )
+
+    assert response == "Here's help."
+    messages = captured["messages"]
+    assert messages[-1]["content"] == "How can I help [email redacted]?"
 
 
 def test_refund_status_reports_no_request_when_no_refunds_exist() -> None:
