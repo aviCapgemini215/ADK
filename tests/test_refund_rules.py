@@ -17,7 +17,10 @@ from adk_app.agent import (
     user_validation_agent,
 )
 from app.schemas import RefundRequest
-from app.services.refunds import is_refund_window_open
+from app.services.refunds import (
+    _purchase_registrations_statement,
+    is_refund_window_open,
+)
 from pydantic import ValidationError
 
 
@@ -42,6 +45,22 @@ def test_future_purchase_is_ineligible() -> None:
     now = datetime(2026, 1, 1, 12, tzinfo=timezone.utc)
 
     assert not is_refund_window_open(now + timedelta(seconds=1), now)
+
+
+def test_active_purchase_query_excludes_refunded_purchases() -> None:
+    active_filter = str(
+        _purchase_registrations_statement(
+            "user-id", active_only=True
+        ).whereclause
+    )
+    all_filter = str(
+        _purchase_registrations_statement(
+            "user-id", active_only=False
+        ).whereclause
+    )
+
+    assert "purchases.payment_status = :payment_status_1" in active_filter
+    assert "purchases.payment_status" not in all_filter
 
 
 def test_refund_request_uses_email_without_purchase_id() -> None:
