@@ -1,0 +1,32 @@
+name: Merge bugfix into main
+
+on:
+  push:
+    branches:
+      - bugfix
+
+permissions:
+  contents: write
+
+concurrency:
+  group: merge-bugfix-into-main
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Merge bugfix into main
+        run: |
+          git fetch origin bugfix main
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git merge --no-ff --no-edit origin/bugfix
+          git push origin HEAD:main
