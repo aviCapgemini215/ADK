@@ -5,8 +5,6 @@ from uuid import UUID, uuid4
 from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-
-
 class Base(DeclarativeBase):
     pass
 
