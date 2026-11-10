@@ -10,8 +10,8 @@ strict seven-day window to each registration.
 - `users`, `courses`, `purchases`, and `refunds` PostgreSQL tables.
 - FastAPI endpoints for user/course creation, purchases, eligibility, refund
   requests, and refund status.
-- ADK sequential agents for user/purchase validation, policy checking, refund
-  processing, and status lookup (`adk_app/agent.py`).
+- An ADK coordinator and specialist agents for registration validation,
+  eligibility, refund processing, and status lookup (`adk_app/agent.py`).
 - Email and refund-policy checks run in the backend; policy and ownership are
   rechecked during the transaction that records refund outcomes.
 - Email-only requests apply to every course registration belonging to that
@@ -20,6 +20,9 @@ strict seven-day window to each registration.
   does not connect to a real payment provider or move money. Any other mode
   leaves eligible refunds as `pending` until you integrate and confirm a
   payment-provider refund.
+
+For the application entry points and a step-by-step explanation of the API,
+ADK, database, and refund flows, see [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## Requirements
 
