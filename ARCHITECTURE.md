@@ -48,9 +48,10 @@ adk run adk_app
 ADK loads the `adk_app` package and finds its root agent. The root agent is an
 `EmailRefundCoordinator`, which routes each user message to one of four
 deterministic specialists: registration validation, refund eligibility,
-refund processing, or refund status. The coordinator and specialists are
-implemented in Python; refund decisions are made by backend rules and
-PostgreSQL queries, not by an LLM.
+refund processing, or refund status. General questions that do not select an
+account/refund action are sent to the configured Groq model. The coordinator
+and specialists are implemented in Python; refund decisions are made by
+backend rules and PostgreSQL queries, not by an LLM.
 
 ### Database container
 
@@ -154,19 +155,19 @@ chat request does not provide a reason, it uses
 
 Each user turn enters `root_agent` in `adk_app/agent.py`:
 
-1. The coordinator reads the current turn and conversation history, extracts
-   an email address, and classifies the request using keyword/rule matching.
+1. The coordinator reads the current turn, extracts an email address, and
+   classifies the request using keyword/rule matching.
 2. If an email has not yet been validated in the conversation, registration
-   validation runs first. Otherwise, the request is routed to the specialist
-   for registration validation, eligibility, processing, or status.
+   validation runs first. Otherwise, selected account/refund actions are
+   routed to the corresponding specialist.
 3. A specialist opens its own SQLAlchemy session using `SessionLocal`, calls
    the shared refund service, and turns the result into a user-facing message.
-4. For a newly processed cancellation, the specialist sends a notification
-   email after the refund service completes. Existing requests are reported
-   without creating another refund.
-5. If the message cannot be classified, the coordinator asks for a registered
-   email or prompts the user to cancel a course or check status, depending on
-   what is already known in the conversation.
+   A newly processed cancellation also triggers a notification email.
+4. If the user has already validated an email and is choosing a course, the
+   coordinator prompts them to cancel a course or check status.
+5. Otherwise, the current question is sent to Groq for a plain-language
+   response. Email addresses are redacted before sending; without
+   `GROQ_API_KEY`, the chat explains how to configure it.
 
 The ADK flow does not use FastAPI routes or FastAPI's request-scoped database
 dependency. It calls the same refund service directly and manages its database
