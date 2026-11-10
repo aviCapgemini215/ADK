@@ -98,9 +98,11 @@ adk run adk_app
 ```
 
 The ADK workflow first asks for the registered email. It reports when the
-user does not exist; otherwise it lists the user's registered courses and asks
-whether to cancel a course or check refund status. A cancellation must name
-one of the listed courses, and only that course's registration is processed.
+user does not exist; otherwise it lists the user's active (paid) course
+purchases and asks whether to cancel a course or check refund status.
+Previously refunded courses are not offered as active purchases. A cancellation
+must name one of the listed courses, and only that course's registration is
+processed.
 The workflow sends one email after processing and includes the refund ID,
 status, amount, and reason. To check status, it lists recorded refunds or says
 there is no refund request. The FastAPI refund endpoint remains a separate

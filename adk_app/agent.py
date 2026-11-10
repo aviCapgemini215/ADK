@@ -171,9 +171,13 @@ class EmailRefundSpecialist(BaseAgent):
                         )
                         if user_result.scalar_one_or_none() is None:
                             raise RefundError(404, "User not found")
-                        results = await check_refunds_for_email(session, email)
+                        results = await check_refunds_for_email(
+                            session, email, active_only=True
+                        )
                     elif self.action == "eligibility":
-                        results = await check_refunds_for_email(session, email)
+                        results = await check_refunds_for_email(
+                            session, email, active_only=True
+                        )
                     elif self.action == "status":
                         user_result = await session.execute(
                             select(User).where(
@@ -199,7 +203,7 @@ class EmailRefundSpecialist(BaseAgent):
                         ]
                     elif self.action == "process":
                         registrations = await check_refunds_for_email(
-                            session, email
+                            session, email, active_only=True
                         )
                         current_request = _current_request_text(ctx)
                         matching_titles = _matching_course_titles(
@@ -267,6 +271,13 @@ class EmailRefundSpecialist(BaseAgent):
                 ):
                     response_text = (
                         f"User {email} exists, but has no course registrations."
+                    )
+                elif (
+                    self.action in {"validate", "eligibility", "process"}
+                    and exc.detail == "No active course purchases found for this user"
+                ):
+                    response_text = (
+                        f"User {email} has no active course purchases."
                     )
                 else:
                     response_text = (

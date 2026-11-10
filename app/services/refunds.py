@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import PAYMENT_GATEWAY_MODE
@@ -102,8 +102,25 @@ async def process_refund(
         return refund
 
 
+def _purchase_registrations_statement(
+    user_id: UUID, *, active_only: bool
+) -> Select[tuple[Purchase, Course]]:
+    statement = (
+        select(Purchase, Course)
+        .join(Course, Course.id == Purchase.course_id)
+        .where(Purchase.user_id == user_id)
+        .order_by(Purchase.purchased_at.desc())
+    )
+    if active_only:
+        statement = statement.where(Purchase.payment_status == "paid")
+    return statement
+
+
 async def check_refunds_for_email(
-    session: AsyncSession, email: str
+    session: AsyncSession,
+    email: str,
+    *,
+    active_only: bool = False,
 ) -> list[dict[str, object]]:
     user_result = await session.execute(
         select(User).where(func.lower(User.email) == email.strip().lower())
@@ -112,15 +129,18 @@ async def check_refunds_for_email(
     if user is None:
         raise RefundError(404, "User not found")
 
-    registrations = await session.execute(
-        select(Purchase, Course)
-        .join(Course, Course.id == Purchase.course_id)
-        .where(Purchase.user_id == user.id)
-        .order_by(Purchase.purchased_at.desc())
+    registrations_statement = _purchase_registrations_statement(
+        user.id, active_only=active_only
     )
+    registrations = await session.execute(registrations_statement)
     rows = registrations.all()
     if not rows:
-        raise RefundError(404, "No course registrations found for this user")
+        detail = (
+            "No active course purchases found for this user"
+            if active_only
+            else "No course registrations found for this user"
+        )
+        raise RefundError(404, detail)
 
     refund_result = await session.execute(
         select(Refund).where(Refund.user_id == user.id)
@@ -185,7 +205,8 @@ async def process_refunds_for_email(
         )
         if course_title is not None:
             registrations_statement = registrations_statement.where(
-                func.lower(Course.title) == course_title.strip().lower()
+                func.lower(Course.title) == course_title.strip().lower(),
+                Purchase.payment_status == "paid",
             )
         registrations = await session.execute(registrations_statement)
         rows = registrations.all()
@@ -193,7 +214,7 @@ async def process_refunds_for_email(
             if course_title is not None:
                 raise RefundError(
                     404,
-                    f"Course '{course_title}' is not registered to this user",
+                    f"Course '{course_title}' is not an active purchase for this user",
                 )
             raise RefundError(404, "No course registrations found for this user")
 
